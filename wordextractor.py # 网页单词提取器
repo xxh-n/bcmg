@@ -1,1 +1,94 @@
+#!/usr/bin/env python3
+"""网页单词提取器 —— 信息安全基础能力训练 示例一。
+
+爬取网页 → 提取单词 → 统计词频 → 排序 → 输出 Top 10 → 生成密码变形。
+"""
+import re
+import sys
+
+import click
+import requests
+from bs4 import BeautifulSoup
+
+
+def get_html_of(url):
+    """下载网页内容，处理 404 等异常。"""
+    try:
+        resp = requests.get(url, timeout=10)
+        if resp.status_code != 200:
+            print(f"[!] 请求失败，状态码: {resp.status_code}", file=sys.stderr)
+            sys.exit(1)
+        return resp.text
+    except requests.RequestException as e:
+        print(f"[!] 网络错误: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def get_words(html):
+    """去除 HTML 标签，用正则提取所有单词。"""
+    soup = BeautifulSoup(html, "html.parser")
+    text = soup.get_text()
+    return re.findall(r"\w+", text)
+
+
+def count_words(words, min_length=5):
+    """统计词频，只保留长度 >= min_length 的单词。"""
+    word_count = {}
+    for word in words:
+        if len(word) < min_length:
+            continue
+        if word not in word_count:
+            word_count[word] = 1
+        else:
+            word_count[word] += 1
+    return word_count
+
+
+def sort_words(word_count):
+    """按词频降序排序。"""
+    return sorted(
+        word_count.items(),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+
+
+def password_mutations(word):
+    """生成常见密码变形。"""
+    years = ["2019", "2020", "2021", "2022", "2023", "2024", "2025"]
+    suffixes = ["1!", "2!", "3!", "01", "123"]
+    results = {word, word.lower(), word.upper(), word.capitalize()}
+    for y in years:
+        results.add(word + y)
+    for s in suffixes:
+        results.add(word + s)
+    return sorted(results)
+
+
+@click.command()
+@click.option("--url", required=True, help="目标网页 URL")
+@click.option("--length", default=5, type=int, help="单词最小长度")
+@click.option("--output", "-o", default=None, help="输出文件路径")
+def main(url, length, output):
+    html = get_html_of(url)
+    words = get_words(html)
+    word_count = count_words(words, length)
+    top_words = sort_words(word_count)[:10]
+
+    lines = [f"{word}: {count}" for word, count in top_words]
+    lines.append("\n--- 密码变形示例 ---")
+    if top_words:
+        lines.extend(password_mutations(top_words[0][0]))
+
+    text = "\n".join(lines)
+    if output:
+        with open(output, "w", encoding="utf-8") as wr:
+            wr.write(text)
+        print(f"[+] 结果已写入 {output}")
+    else:
+        print(text)
+
+
+if __name__ == "__main__":
+    main()
 
